@@ -1,0 +1,9 @@
+# backend/requirements.txt (Updated for AsyncPG)
+fastapi
+uvicorn[standard]
+pydantic
+python-multipart
+sqlalchemy[asyncio]  # <-- IMPORTANT: Adds asyncio support for SQLAlchemy
+psycopg[binary]      # <-- New standard driver (replaces psycopg2)
+pydantic-settings    # (If not already added)
+python-dotenv
