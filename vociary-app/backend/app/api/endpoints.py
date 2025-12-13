@@ -158,3 +158,40 @@ async def read_entries_by_date(
     """
     entries = await diary_service.get_entries_by_date(db, user_id=current_user_id, entry_date=entry_date)
     return entries
+
+# ====================================================================
+# 4. REFLECTION & INSIGHTS (New Feature)
+# ====================================================================
+
+from pydantic import BaseModel
+
+class ReflectionResponse(BaseModel):
+    mood_score: int
+    mood_emoji: str
+    takeaways: List[str]
+    action_item: str
+
+@router.post("/reflect/{entry_id}", response_model=ReflectionResponse)
+async def generate_reflection(
+    entry_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db_async),
+):
+    """
+    Generates AI-powered insights for a specific journal entry.
+    """
+    # 1. Fetch the entry
+    entry = await db.get(models.Entry, entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    
+    if entry.user_id != current_user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this entry")
+
+    # 2. Call AI Service
+    from ..services import ai_service
+    try:
+        insights = await ai_service.generate_daily_reflection(entry.content)
+        return insights
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate insights: {e}")

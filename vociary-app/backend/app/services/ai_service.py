@@ -20,7 +20,7 @@ async def get_transcription(audio_file: UploadFile) -> str:
     """
     Sends the audio file to the Groq ASR service and returns the raw text transcript.
     """
-    if not GROQ_API_KEY:
+    if not GROQ_API_KEY or GROQ_API_KEY == "your_groq_api_key_here":
         # Placeholder for development without API key
         return "Today was a really long day. I had a big presentation, and it went much better than I expected. I felt a lot of relief afterwards, and I celebrated with a nice cup of tea."
 
@@ -61,7 +61,7 @@ async def _call_llm(system_prompt: str, user_prompt: str) -> str:
     """
     Handles the asynchronous API call to the Groq LLM for text generation/integration.
     """
-    if not GROQ_API_KEY:
+    if not GROQ_API_KEY or GROQ_API_KEY == "your_groq_api_key_here":
         # Placeholder response for development
         return f"[[GROQ MOCK OUTPUT]]: The refined entry should be:\n\n{user_prompt[:200]}..."
 
@@ -129,3 +129,39 @@ async def integrate_new_content(new_transcript: str, existing_entry: str) -> str
     )
 
     return await _call_llm(system_prompt, user_prompt)
+
+async def generate_daily_reflection(entry_text: str) -> dict:
+    """
+    Analyzes the complete diary entry to generate structured insights:
+    - Mood Score (1-10) & Emoji
+    - Key Takeaways (List)
+    - Action Item (Single actionable step)
+    """
+    import json
+    
+    system_prompt = (
+        "You are an insightful personal growth assistant. Analyze the user's diary entry and "
+        "extract structured insights. You must return ONLY a valid JSON object with the following keys:\n"
+        "- 'mood_score': an integer from 1 (lowest) to 10 (highest).\n"
+        "- 'mood_emoji': a single emoji representing the dominant mood.\n"
+        "- 'takeaways': a list of 3 brief, bullet-point style takeaways/observations.\n"
+        "- 'action_item': a single, concrete, actionable step for tomorrow based on the entry.\n\n"
+        "Do not include any markdown formatting (like ```json), just the raw JSON string."
+    )
+    user_prompt = f"Diary Entry to Analyze:\n\n{entry_text}"
+
+    response_text = await _call_llm(system_prompt, user_prompt)
+    
+    # Clean up POTENTIAL markdown backticks if the model ignores instruction
+    cleaned_text = response_text.replace("```json", "").replace("```", "").strip()
+    
+    try:
+        return json.loads(cleaned_text)
+    except json.JSONDecodeError:
+        # Fallback if JSON parsing fails
+        return {
+            "mood_score": 5,
+            "mood_emoji": "😐",
+            "takeaways": ["Could not parse insights.", "Please try again later.", "Keep journaling!"],
+            "action_item": "Reflect on your day manually."
+        }

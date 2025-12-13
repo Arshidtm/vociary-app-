@@ -9,7 +9,7 @@ from .models import Base  # Import the Base class from our SQLAlchemy models
 # The URL must use the 'postgresql+asyncpg' or 'postgresql+psycopg' dialect for async support.
 # We will use 'postgresql+psycopg' as the modern, recommended driver with SQLAlchemy.
 SQLALCHEMY_DATABASE_URL = settings.SQLALCHEMY_DATABASE_URL.replace(
-    "postgresql://", "postgresql+psycopg://"
+    "postgresql://", "postgresql+asyncpg://"
 )
 
 # --- Async Engine Configuration ---

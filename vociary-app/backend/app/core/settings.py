@@ -2,6 +2,7 @@
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
+from urllib.parse import quote_plus
 
 # Remember to ensure 'pydantic-settings' is in your requirements.txt
 class Settings(BaseSettings):
@@ -32,8 +33,8 @@ class Settings(BaseSettings):
         """Constructs the full PostgreSQL connection URL."""
         # Note: The database.py file replaces 'postgresql://' with 'postgresql+psycopg://'
         return (
-            f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:"
-            f"{self.DB_PORT}/{self.DB_NAME}"
+            f"postgresql://{quote_plus(self.DB_USER)}:{quote_plus(self.DB_PASSWORD)}@"
+            f"{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         )
 
     # --- AI SERVICES (Groq Only) ---
