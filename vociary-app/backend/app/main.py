@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 # Import configuration and setup files
 from .core.settings import settings
 from .db.database import init_db_async
-from .api import endpoints # Import the API router module
+from .api import endpoints, auth # Import the API router module
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -58,7 +58,10 @@ app.add_middleware(
 
 # --- 4. Include API Routers ---
 
-# All endpoints in endpoints.py will be prefixed with /api/v1/entries
+# Auth Routes: /api/v1/auth
+app.include_router(auth.router, prefix=f"/api/{settings.API_VERSION}")
+
+# Entry Routes: /api/v1/entries
 app.include_router(endpoints.router, prefix=f"/api/{settings.API_VERSION}")
 
 

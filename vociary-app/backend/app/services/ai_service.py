@@ -130,6 +130,28 @@ async def integrate_new_content(new_transcript: str, existing_entry: str) -> str
 
     return await _call_llm(system_prompt, user_prompt)
 
+async def refine_entry(current_content: str, selected_text: str, user_instruction: str) -> str:
+    """
+    Refines the diary entry based on specific user instructions applied to a selected segment.
+    """
+    system_prompt = (
+        "You are an expert editor for a personal diary. Your goal is to modify the 'Current Entry' "
+        "based on the user's specific instruction. "
+        "The user has highlighted a specific part of the text ('Selected Text') and provided an "
+        "instruction ('User Instruction/Comment') on how to change it. "
+        "You must rewrite the entry to incorporate this change naturally. "
+        "Maintain the original voice and context. Return ONLY the fully updated entry text."
+    )
+    
+    user_prompt = (
+        f"Current Entry:\n---\n{current_content}\n---\n\n"
+        f"Selected Text (to be changed): \"{selected_text}\"\n"
+        f"User Instruction/Comment: \"{user_instruction}\"\n\n"
+        f"Please provide the updated full entry:"
+    )
+
+    return await _call_llm(system_prompt, user_prompt)
+
 async def generate_daily_reflection(entry_text: str) -> dict:
     """
     Analyzes the complete diary entry to generate structured insights:

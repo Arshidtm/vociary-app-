@@ -1,15 +1,16 @@
 # backend/app/api/endpoints.py
 
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession # Use AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import date
 from typing import List
 
 # Import models, schemas, services, and database utilities
-from ..db.database import get_db_async # <-- Use the async dependency
+from ..db.database import get_db_async
 from ..db import models
 from ..schemas import entry as schemas
 from ..services import diary_service
+from .deps import get_current_user 
 
 # Define the API router
 router = APIRouter(
@@ -18,36 +19,23 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-# --- Dependency Placeholder ---
-# We need this to ensure the API works for now, before full auth is implemented.
-async def get_current_user_id(db: AsyncSession = Depends(get_db_async)):
-    # --- TEMPORARY MOCK ---
-    # In a real app, this would be secured by JWT/OAuth.
-    # For now, we ensure a user with ID 1 exists, or create a mock user.
-    user = await db.get(models.User, 1) 
-    
-    if not user:
-        # Create a mock user (and a default diary) for development purposes
-        mock_user = models.User(
-            id=1, 
-            email="test@aurajournal.dev", 
-            username="AuraUser", 
-            hashed_password="mock"
+@router.post("/refine", response_model=schemas.RefinementResponse)
+async def refine_entry(
+    request: schemas.RefinementRequest,
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Refines a diary entry based on user instructions (comment on selected text).
+    """
+    try:
+        updated_text = await diary_service.refine_entry(
+            current_content=request.current_content,
+            selected_text=request.selected_text,
+            user_instruction=request.user_instruction
         )
-        db.add(mock_user)
-        
-        default_diary = models.Diary(
-            owner_id=1,
-            name="My Daily Reflections",
-            description="The primary diary for daily voice entries."
-        )
-        db.add(default_diary)
-        
-        await db.commit()
-        print("Created MOCK User and Default Diary with ID 1.")
-        
-    return 1 # Always return the hardcoded user ID for now
-
+        return schemas.RefinementResponse(updated_content=updated_text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Refinement failed: {e}")
 
 # ====================================================================
 # 1. AUDIO PROCESSING & PREVIEW (Initial Flow)
@@ -56,7 +44,7 @@ async def get_current_user_id(db: AsyncSession = Depends(get_db_async)):
 @router.post("/process_audio", response_model=schemas.EntryUpdatePreview)
 async def process_new_audio(
     audio_file: UploadFile = File(..., description="Audio recording of the day's events"),
-    current_user_id: int = Depends(get_current_user_id),
+    current_user: models.User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_async),
 ):
     """
@@ -74,7 +62,7 @@ async def process_new_audio(
     
     # 2. Check for Existing Entry (We'll check for ANY entry for the day first)
     today = date.today()
-    existing_entry = await diary_service.get_entry_by_date(db, user_id=current_user_id, entry_date=today)
+    existing_entry = await diary_service.get_entry_by_date(db, user_id=current_user.id, entry_date=today)
     
     # 3. Use LLM to Process/Integrate Content
     if existing_entry:
@@ -87,10 +75,20 @@ async def process_new_audio(
         original_content = ""
         updated_content = await diary_service.generate_initial_entry(transcript)
         # Assuming the first diary found is the default one (ID 1), or we use a fallback
-        diaries = await diary_service.get_diaries_for_user(db, current_user_id)
+        diaries = await diary_service.get_diaries_for_user(db, current_user.id)
         if not diaries:
-             raise HTTPException(status_code=500, detail="No diaries found for user.")
-        diary_id = diaries[0].id # Assign to the first diary found
+             # Create a default diary if none exists (Auto-provisioning)
+             default_diary = models.Diary(
+                owner_id=current_user.id,
+                name="My Daily Reflections",
+                description="The primary diary for daily voice entries."
+             )
+             db.add(default_diary)
+             await db.commit()
+             await db.refresh(default_diary)
+             diary_id = default_diary.id
+        else:
+            diary_id = diaries[0].id 
         
     return schemas.EntryUpdatePreview(
         original_content=original_content,
@@ -107,7 +105,7 @@ async def process_new_audio(
 @router.post("/commit", response_model=schemas.Entry)
 async def commit_diary_entry(
     entry_data: schemas.EntryCreate, # Contains final content and selected diary_id
-    current_user_id: int = Depends(get_current_user_id),
+    current_user: models.User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_async),
 ):
     """
@@ -118,7 +116,7 @@ async def commit_diary_entry(
     # Check if an entry already exists for the unique key (user_id, entry_date, diary_id)
     entry = await diary_service.get_entry_by_key(
         db, 
-        user_id=current_user_id, 
+        user_id=current_user.id, 
         entry_date=entry_data.entry_date, 
         diary_id=entry_data.diary_id
     )
@@ -137,7 +135,7 @@ async def commit_diary_entry(
         # CREATE new entry (Initial save)
         new_entry = await diary_service.create_entry(
             db=db, 
-            user_id=current_user_id, 
+            user_id=current_user.id, 
             entry_data=entry_data
         )
         return new_entry
@@ -147,16 +145,42 @@ async def commit_diary_entry(
 # 3. UTILITY ENDPOINTS
 # ====================================================================
 
+@router.get("/history", response_model=List[schemas.Entry])
+async def read_entry_history(
+    skip: int = 0,
+    limit: int = 20,
+    current_user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_async),
+):
+    """
+    Retrieves the user's recent diary entries (for the Book View).
+    """
+    entries = await diary_service.get_recent_entries(db, user_id=current_user.id, limit=limit, offset=skip)
+    return entries
+
 @router.get("/{entry_date}", response_model=List[schemas.Entry])
 async def read_entries_by_date(
     entry_date: date,
-    current_user_id: int = Depends(get_current_user_id),
+    current_user: models.User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_async),
 ):
     """
     Retrieves all diary entries for a specific date and user (across all diaries).
     """
-    entries = await diary_service.get_entries_by_date(db, user_id=current_user_id, entry_date=entry_date)
+    entries = await diary_service.get_entries_by_date(db, user_id=current_user.id, entry_date=entry_date)
+    return entries
+
+@router.get("/history", response_model=List[schemas.Entry])
+async def read_entry_history(
+    skip: int = 0,
+    limit: int = 20,
+    current_user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_async),
+):
+    """
+    Retrieves the user's recent diary entries (for the Book View).
+    """
+    entries = await diary_service.get_recent_entries(db, user_id=current_user.id, limit=limit, offset=skip)
     return entries
 
 # ====================================================================
@@ -174,7 +198,7 @@ class ReflectionResponse(BaseModel):
 @router.post("/reflect/{entry_id}", response_model=ReflectionResponse)
 async def generate_reflection(
     entry_id: int,
-    current_user_id: int = Depends(get_current_user_id),
+    current_user: models.User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_async),
 ):
     """
@@ -185,7 +209,7 @@ async def generate_reflection(
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
     
-    if entry.user_id != current_user_id:
+    if entry.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to access this entry")
 
     # 2. Call AI Service

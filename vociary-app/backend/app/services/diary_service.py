@@ -96,6 +96,20 @@ async def generate_initial_entry(transcript: str) -> str:
     """Wrapper for the LLM initial generation function."""
     return await ai_service.generate_initial_entry(transcript)
 
+async def refine_entry(current_content: str, selected_text: str, user_instruction: str) -> str:
+    """Wrapper for the LLM refinement function."""
+    return await ai_service.refine_entry(current_content, selected_text, user_instruction)
+
+async def get_recent_entries(db: AsyncSession, user_id: int, limit: int = 10, offset: int = 0) -> List[models.Entry]:
+    """Retrieves recent diary entries for a user, ordered by date descending."""
+    stmt = select(models.Entry).filter(
+        models.Entry.user_id == user_id
+    ).order_by(models.Entry.entry_date.desc()).offset(offset).limit(limit)
+    
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
 
 # ====================================================================
 # C. DIARY CRUD (ASYNC)

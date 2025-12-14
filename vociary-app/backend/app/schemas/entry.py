@@ -77,3 +77,13 @@ class EntryUpdatePreview(BaseModel):
     updated_preview_content: str
     entry_date: date
     diary_id: int
+
+# --- 6. Refinement Schemas ---
+
+class RefinementRequest(BaseModel):
+    current_content: str
+    selected_text: str
+    user_instruction: str
+
+class RefinementResponse(BaseModel):
+    updated_content: str

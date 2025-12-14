@@ -1,10 +1,13 @@
 # backend/requirements.txt (Updated for AsyncPG)
 fastapi
 uvicorn[standard]
-pydantic
+pydantic[email]
 python-multipart
+httpx
 sqlalchemy[asyncio]  # <-- IMPORTANT: Adds asyncio support for SQLAlchemy
 psycopg[binary]      # <-- New standard driver (replaces psycopg2)
 asyncpg              # <-- Required for async SQLAlchemy with postgresql+asyncpg
 pydantic-settings    # (If not already added)
 python-dotenv
+passlib[argon2]      # <-- For password hashing (argon2 is more robust/compatible)
+python-jose[cryptography] # <-- For JWT tokens

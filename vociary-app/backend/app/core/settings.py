@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
     API_VERSION: str = "v1"
+    
+    # --- AUTH ---
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # --- DATABASE ---
     DB_HOST: str
